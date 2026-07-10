@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description
+  >Lightning app for the Bedrock Financial Customer Onboarding workflow. Used by the Bedrock DevSecOps demo.</description>
+    <formFactors>Large</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
+    <label>Bedrock Onboarding</label>
+    <navType>Standard</navType>
+    <tabs>Onboarding_Request__c</tabs>
+    <uiType>Lightning</uiType>
+</CustomApplication>

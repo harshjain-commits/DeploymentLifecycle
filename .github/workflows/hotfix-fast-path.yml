@@ -1,0 +1,134 @@
+name: Hotfix Fast Path
+
+# Bedrock DevSecOps demo pipeline - Hotfix fast path.
+# Triggered manually by the Release Train Engineer on a hotfix/* branch.
+#
+# Flow:
+#   hotfix/* branch  ->  JWT auth to PROD  ->  validate  ->  deploy  ->
+#   auto retro-merge PR back to main.
+#
+# Security note:
+#   All Salesforce credentials come from GitHub Secrets via env: bindings.
+#   Untrusted context (branch name, incident id) is passed to shell only
+#   through env: variables (never interpolated directly) to prevent workflow
+#   injection.
+#
+# Required GitHub secrets (production environment):
+#   SFDX_JWT_KEY_PROD, SFDX_CONSUMER_KEY_PROD,
+#   SFDX_USERNAME_PROD, SFDX_INSTANCE_URL_PROD
+
+on:
+  workflow_dispatch:
+    inputs:
+      incident_id:
+        description: "Incident ticket ID (e.g. INC-12345)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  hotfix-deploy:
+    name: Hotfix to PROD
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    env:
+      SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_PROD }}
+      SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_PROD }}
+      SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_PROD }}
+      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_PROD }}
+      INCIDENT_ID: ${{ inputs.incident_id }}
+      REF_NAME: ${{ github.ref_name }}
+      COMMIT_SHA: ${{ github.sha }}
+      ACTOR: ${{ github.actor }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guardrail - branch must start with hotfix/
+        run: |
+          case "$REF_NAME" in
+            hotfix/*)
+              echo "Branch OK: $REF_NAME"
+              ;;
+            *)
+              echo "::error::Hotfix Fast Path can only run on hotfix/* branches (got $REF_NAME)."
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Guard - required JWT secrets present
+        run: |
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+            echo "::error::PROD JWT secrets not configured. Cannot run hotfix."
+            exit 1
+          fi
+
+      - name: Authenticate PROD (JWT)
+        run: |
+          printf '%s' "$SFDX_JWT_KEY" > ./server.key
+          chmod 600 ./server.key
+          sf org login jwt \
+            --client-id "$SFDX_CONSUMER_KEY" \
+            --jwt-key-file ./server.key \
+            --username "$SFDX_USERNAME" \
+            --instance-url "$SFDX_INSTANCE_URL" \
+            --alias prod \
+            --set-default
+          rm -f ./server.key
+
+      - name: Validate (check-only) against PROD
+        run: |
+          sf project deploy validate \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60
+
+      - name: Deploy hotfix to PROD
+        run: |
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60
+
+      - name: Emit hotfix evidence
+        if: always()
+        run: |
+          mkdir -p ./evidence
+          {
+            echo "Incident:   $INCIDENT_ID"
+            echo "Branch:     $REF_NAME"
+            echo "Commit:     $COMMIT_SHA"
+            echo "Actor:      $ACTOR"
+            echo "Time (UTC): $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } > ./evidence/hotfix.txt
+
+      - name: Upload hotfix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hotfix-evidence-${{ github.run_id }}
+          path: ./evidence
+          retention-days: 365
+
+      - name: Open retro-merge PR back to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$REF_NAME" \
+            --title "Retro-merge $INCIDENT_ID into main" \
+            --body "Hotfix ${INCIDENT_ID} was deployed to PROD from branch ${REF_NAME}. Merging back into main per the hotfix process." \
+            --label hotfix \
+            --label retro-merge \
+            || echo "::warning::Retro-merge PR may already exist."

@@ -1,0 +1,18 @@
+// Bedrock Financial Onboarding - operational queue view.
+// Use in VS Code: SFDX: Execute SOQL Query with Currently Selected Text.
+
+SELECT
+    Name,
+    Customer_Name__c,
+    Division__c,
+    Net_Worth_Tier__c,
+    Source_Channel__c,
+    Status__c,
+    Priority__c,
+    Risk_Score__c,
+    Submitted_Date__c,
+    Owner.Name
+FROM Onboarding_Request__c
+WHERE Status__c IN ('New', 'In Review')
+ORDER BY Risk_Score__c DESC, Submitted_Date__c ASC
+LIMIT 50

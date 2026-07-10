@@ -1,0 +1,112 @@
+name: Code Analyzer
+
+# Bedrock DevSecOps demo pipeline - Salesforce Code Analyzer (SCA).
+#
+# Fires the moment a pull request is opened (or updated / reopened) against
+# ANY branch, and also on every push to the promotion branches. Findings are
+# uploaded as SARIF so they appear inline in the PR's "Files changed" tab
+# under GitHub Code Scanning, and as HTML/JSON artefacts for offline review.
+#
+# The check FAILS on severity >= 3 (moderate, high, critical) so unresolved
+# findings block the PR.
+#
+# Security note:
+#   No Salesforce org credentials are used - this is a purely static analysis
+#   workflow. All GitHub context values consumed by shell/action inputs are
+#   passed via env: bindings to prevent workflow injection.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ["**"]
+  push:
+    branches: [SIT, UAT, main]
+  workflow_dispatch:
+
+concurrency:
+  group: code-analyzer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  code-analyzer:
+    name: Salesforce Code Analyzer
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft != true
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Install Salesforce Code Analyzer plugin
+        run: sf plugins install code-analyzer
+
+      - name: Run Salesforce Code Analyzer
+        id: sca
+        run: |
+          sf code-analyzer run \
+            --workspace force-app \
+            --output-file sca-report.html \
+            --output-file sca-report.json \
+            --output-file sca-report.sarif \
+            --severity-threshold 3
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && hashFiles('sca-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sca-report.sarif
+          category: salesforce-code-analyzer
+
+      - name: Upload Code Analyzer report (HTML + JSON + SARIF)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-analyzer-report
+          path: |
+            sca-report.html
+            sca-report.json
+            sca-report.sarif
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: PR comment - link to report on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const runUrl = process.env.RUN_URL;
+            const body = [
+              '### Salesforce Code Analyzer failed',
+              '',
+              'One or more findings at severity >= 3 (moderate, high, or critical) were detected.',
+              '',
+              'Inline annotations should appear in the **Files changed** tab under the *Code scanning* checks.',
+              '',
+              `Full HTML / JSON / SARIF report is attached to the workflow run: [view report](${runUrl}).`,
+              '',
+              'To reproduce locally:',
+              '```',
+              'sf plugins install code-analyzer',
+              'sf code-analyzer run --workspace force-app --severity-threshold 3',
+              '```',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

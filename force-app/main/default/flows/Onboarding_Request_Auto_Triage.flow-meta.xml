@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>62.0</apiVersion>
+    <decisions>
+        <description
+    >Routes new onboarding requests based on Priority.</description>
+        <name>Route_By_Priority</name>
+        <label>Route By Priority</label>
+        <locationX>314</locationX>
+        <locationY>335</locationY>
+        <defaultConnectorLabel>Default Outcome</defaultConnectorLabel>
+        <rules>
+            <name>High_Or_Critical</name>
+            <conditionLogic>or</conditionLogic>
+            <conditions>
+                <leftValueReference>$Record.Priority__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>High</stringValue>
+                </rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Priority__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Critical</stringValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Mark_In_Review</targetReference>
+            </connector>
+            <label>High Or Critical</label>
+        </rules>
+    </decisions>
+    <description
+  >Auto-triages newly created onboarding requests. High and Critical priority requests are immediately moved to In Review so the BF onboarding ops team can pick them up; Low/Medium remain in New for batch processing.</description>
+    <environments>Default</environments>
+    <interviewLabel
+  >Onboarding Request Auto-Triage {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Onboarding Request Auto-Triage</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>CanvasMode</name>
+        <value>
+            <stringValue>AUTO_LAYOUT_CANVAS</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>OriginBuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <recordUpdates>
+        <description
+    >Sets the Status to In Review for High/Critical onboarding requests.</description>
+        <name>Mark_In_Review</name>
+        <label>Mark In Review</label>
+        <locationX>176</locationX>
+        <locationY>455</locationY>
+        <inputAssignments>
+            <field>Status__c</field>
+            <value>
+                <stringValue>In Review</stringValue>
+            </value>
+        </inputAssignments>
+        <inputReference>$Record</inputReference>
+    </recordUpdates>
+    <start>
+        <locationX>188</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Route_By_Priority</targetReference>
+        </connector>
+        <object>Onboarding_Request__c</object>
+        <recordTriggerType>Create</recordTriggerType>
+        <triggerType>RecordAfterSave</triggerType>
+    </start>
+    <status>Active</status>
+</Flow>

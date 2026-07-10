@@ -1,0 +1,25 @@
+# Bedrock DevSecOps - CODEOWNERS
+#
+# Implements the multi-SI access control described in Slide 13 of
+# docs/Bedrock-DevSecOps-Presentation.md. Each SI owns the package paths
+# they deliver; cross-package changes require sign-off from BE.
+#
+# Replace the @bedrock-* team handles with real GitHub teams once the
+# Program Architect signs off on the partner charter.
+
+# Pipeline + governance: BE DevSecOps owns
+/.github/                              @bedrock-devsecops
+/docs/                                 @bedrock-program-architect @bedrock-devsecops
+
+# Foundation (shared metadata across all feature packages): BE Architecture
+/force-app/main/default/applications/  @bedrock-architecture
+/force-app/main/default/permissionsets/ @bedrock-architecture @bedrock-devsecops
+
+# Bedrock Financial - Onboarding feature
+/force-app/main/default/objects/Onboarding_Request__c/  @bedrock-bf-tech-lead @bedrock-architecture
+/force-app/main/default/classes/OnboardingRequest*      @bedrock-bf-tech-lead
+/force-app/main/default/triggers/OnboardingRequest*     @bedrock-bf-tech-lead
+/force-app/main/default/flows/Onboarding_Request_*      @bedrock-bf-tech-lead
+
+# Fallback - require BE review on anything not explicitly assigned above
+*                                       @bedrock-devsecops
