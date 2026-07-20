@@ -70,6 +70,16 @@ jobs:
     name: Validate Deploy (check-only)
     runs-on: ubuntu-latest
     needs: [format-and-lint]
+    # environment: sit is REQUIRED so this job can read the SIT environment
+    # secrets. Without it, secrets.SFDX_JWT_KEY_SIT etc. resolve to empty
+    # strings (they are scoped to the environment they were declared in),
+    # the guard silently skips validation, and metadata errors only surface
+    # later at CD-time on push-to-SIT. Make sure the "sit" environment in
+    # GitHub has NO "Required reviewers" and NO "Deployment branches"
+    # restriction, otherwise PR runs from feature branches will block or
+    # fail waiting for approval.
+    environment:
+      name: sit
     env:
       SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_SIT }}
       SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_SIT }}
@@ -86,17 +96,24 @@ jobs:
         run: npm install --global @salesforce/cli
 
       - name: Guard - required JWT secrets present
-        id: guard
+        # Hard fail (not skip). SIT is a required PR gate - a missing
+        # credential must never let a PR merge without real validation
+        # against the org. If you are bootstrapping the pipeline and do not
+        # yet have the secrets, either remove this job from `needs:` or
+        # populate the four secrets on the `sit` environment first.
         run: |
-          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
-            echo "::warning::JWT secrets not fully configured; skipping org validation. See .github/CI-CD-JWT-Setup.md."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+          missing=()
+          [ -z "$SFDX_JWT_KEY" ]      && missing+=(SFDX_JWT_KEY_SIT)
+          [ -z "$SFDX_CONSUMER_KEY" ] && missing+=(SFDX_CONSUMER_KEY_SIT)
+          [ -z "$SFDX_USERNAME" ]     && missing+=(SFDX_USERNAME_SIT)
+          [ -z "$SFDX_INSTANCE_URL" ] && missing+=(SFDX_INSTANCE_URL_SIT)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required GitHub Environment secrets on 'sit': ${missing[*]}"
+            echo "::error::Add them under Settings -> Environments -> sit. See .github/CI-CD-JWT-Setup.md."
+            exit 1
           fi
 
       - name: Authenticate to sandbox (JWT)
-        if: steps.guard.outputs.skip == 'false'
         run: |
           printf '%s' "$SFDX_JWT_KEY" > ./server.key
           chmod 600 ./server.key
@@ -110,7 +127,6 @@ jobs:
           rm -f ./server.key
 
       - name: Validate deploy (check-only) with local tests
-        if: steps.guard.outputs.skip == 'false'
         run: |
           sf project deploy validate \
             --source-dir force-app \

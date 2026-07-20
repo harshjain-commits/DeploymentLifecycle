@@ -163,7 +163,7 @@ integration user's profile/perm set to the External Client App's
 ## Step 4 — Add GitHub Environment + Secrets
 
 1. In GitHub: **Settings → Environments → New environment** → name it `sit`.
-2. (Optional) Add reviewers if you want approval gates on SIT.
+2. **Do not add "Required reviewers" or restrict "Deployment branches" on the `sit` environment.** The PR-validation workflow (`.github/workflows/ci-pull-request.yml`) references `environment: sit` so it can read these secrets from every feature-branch PR — any protection rule on the environment will block those PR runs waiting for approval. Reviewers are only appropriate on `production` (see below).
 3. Click into the environment, then **Add secret** four times:
 
 | Secret name             | Value                                                         |
