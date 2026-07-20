@@ -8,7 +8,7 @@ name: Deploy
 #   push to main  -> deploy to PROD org       (skipped until secrets configured)
 #
 # JWT auth is used for all environments. Secrets are namespaced per environment
-# so a single Connected App and integration user per org can be rotated
+# so a single External Client App and integration user per org can be rotated
 # independently.
 #
 # Security note:
@@ -72,7 +72,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Salesforce CLI
         run: npm install --global @salesforce/cli
@@ -153,7 +153,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Salesforce CLI
         run: npm install --global @salesforce/cli
@@ -224,7 +224,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Salesforce CLI
         run: npm install --global @salesforce/cli

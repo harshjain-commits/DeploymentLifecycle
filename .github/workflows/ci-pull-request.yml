@@ -18,8 +18,8 @@ name: PR Validation
 #   to the classic GitHub Actions "workflow injection" class of issues.
 #
 # Required GitHub secrets (target sandbox = SIT for now):
-#   SFDX_JWT_KEY_SIT         Private key contents for the Connected App
-#   SFDX_CONSUMER_KEY_SIT    Consumer Key from the Connected App
+#   SFDX_JWT_KEY_SIT         Private key contents for the External Client App
+#   SFDX_CONSUMER_KEY_SIT    Consumer Key from the External Client App
 #   SFDX_USERNAME_SIT        Integration user username
 #   SFDX_INSTANCE_URL_SIT    My Domain login URL (e.g. https://<org>.my.salesforce.com)
 #
@@ -54,7 +54,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install npm dependencies
@@ -80,7 +80,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Salesforce CLI
         run: npm install --global @salesforce/cli
