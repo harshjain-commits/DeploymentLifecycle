@@ -99,11 +99,16 @@ public with sharing class OnboardingRequestService {
   /**
    * Derives a priority bucket from a numeric risk score.
    *
+   * Parameter is Decimal because Salesforce Number fields (like
+   * Onboarding_Request__c.Risk_Score__c) always surface in Apex as
+   * Decimal, even when the field's scale is 0. Comparisons against the
+   * Integer thresholds below work with implicit widening.
+   *
    * @param riskScore Risk score 0-100.
    * @return Priority picklist value.
    */
   @TestVisible
-  private static String derivePriority(Integer riskScore) {
+  private static String derivePriority(Decimal riskScore) {
     if (riskScore == null) {
       return 'Medium';
     }
