@@ -30,11 +30,7 @@ private class OnboardingRequestServiceTest {
       );
       Test.stopTest();
 
-      System.assertEquals(
-        'New',
-        req.Status__c,
-        'Status should default to New'
-      );
+      System.assertEquals('New', req.Status__c, 'Status should default to New');
       System.assertEquals(
         Date.today(),
         req.Submitted_Date__c,
@@ -175,7 +171,13 @@ private class OnboardingRequestServiceTest {
 
       System.assertEquals(2, resultIds.size(), 'Two ids should be returned');
       List<Onboarding_Request__c> persisted = [
-        SELECT Id, Customer_Name__c, Status__c, Priority__c, Risk_Score__c, Net_Worth_Tier__c
+        SELECT
+          Id,
+          Customer_Name__c,
+          Status__c,
+          Priority__c,
+          Risk_Score__c,
+          Net_Worth_Tier__c
         FROM Onboarding_Request__c
         WHERE Id IN :resultIds
         WITH USER_MODE
@@ -207,7 +209,7 @@ private class OnboardingRequestServiceTest {
           expectedStatus,
           rec.Status__c,
           'Status should reflect the auto-triage flow for tier ' +
-            rec.Net_Worth_Tier__c
+          rec.Net_Worth_Tier__c
         );
       }
     }

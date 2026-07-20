@@ -5,8 +5,10 @@
 #
 # Output (written to ci/keys/, which is git-ignored):
 #   server.key   -> upload the CONTENTS as a GitHub secret (SFDX_JWT_KEY_<env>)
-#   server.crt   -> upload this FILE to the Salesforce Connected App
-#                   under "Use digital signatures"
+#   server.crt   -> upload this FILE to the Salesforce External Client App
+#                   under OAuth Settings -> "Use digital signatures"
+#                   (Classic Connected Apps also accept it if your org still
+#                   allows them.)
 #
 # Usage:
 #   ./scripts/ci/generate-jwt-cert.sh [env-name]
@@ -54,11 +56,13 @@ echo ""
 ls -la
 echo ""
 echo "Next steps:"
-echo "  1. Upload server.crt to your Salesforce Connected App"
-echo "     (Setup -> App Manager -> New Connected App ->"
-echo "      Enable OAuth Settings -> Use digital signatures)."
+echo "  1. Upload server.crt to your Salesforce External Client App"
+echo "     (Setup -> External Client Apps -> External Client App Manager ->"
+echo "      New External Client App -> API (Enable OAuth Settings) ->"
+echo "      Use digital signatures)."
 echo ""
-echo "  2. Copy the Consumer Key from the Connected App and save it as"
+echo "  2. Copy the Consumer Key from the ECA (Settings -> OAuth Settings ->"
+echo "     Consumer Key and Secret) and save it as"
 echo "     GitHub secret SFDX_CONSUMER_KEY_$(echo "${ENV_NAME}" | tr '[:lower:]' '[:upper:]')."
 echo ""
 echo "  3. Copy the ENTIRE contents of server.key (including the"

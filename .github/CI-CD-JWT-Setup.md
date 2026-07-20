@@ -47,40 +47,88 @@ The `ci/keys/` directory is already listed in `.gitignore`.
 
 ---
 
-## Step 2 — Create the Connected App in Salesforce
+## Step 2 — Create the External Client App in Salesforce
 
-Do this in the org you want CI/CD to deploy to (SIT sandbox first).
+Salesforce is migrating away from Connected Apps to **External Client Apps**
+(ECAs). New integrations should use ECAs. The JWT bearer flow works exactly
+the same on the wire — only the Salesforce-side setup UI has changed.
 
-1. **Setup → App Manager → New Connected App**.
-2. Fill in:
-   - **Connected App Name**: `Bedrock DevSecOps CI`
+Do this in the org you want CI/CD to deploy to (SIT first).
+
+### 2a. Create the app shell
+
+1. **Setup → Quick Find → "External Client Apps"** → **External Client App
+   Manager** → click **New External Client App**.
+2. Fill in the **Basic Information** section:
+   - **External Client App Name**: `Bedrock DevSecOps CI`
    - **API Name**: `Bedrock_DevSecOps_CI`
    - **Contact Email**: your email
-3. Under **API (Enable OAuth Settings)** check **Enable OAuth Settings**.
+   - **Distribution State**: `Local` (org-only; do not package)
+
+### 2b. Configure OAuth settings
+
+3. Expand **API (Enable OAuth Settings)** and check **Enable OAuth**.
    - **Callback URL**: `http://localhost:1717/OauthRedirect`
-     (Not used for JWT, but required by the form.)
-   - **Use digital signatures**: check the box, then **Choose File** and
-     upload `ci/keys/sit/server.crt`.
-   - **Selected OAuth Scopes** (add these to the "Selected" column):
+     (Not used for JWT, but the form requires a non-empty value.)
+   - Check **Enable Client Credentials Flow**? → leave **unchecked** (JWT
+     bearer is a different flow).
+   - Check **Enable JWT Bearer Flow** → this is the important one.
+   - Check **Use digital signatures** → **Choose File** → upload
+     `ci/keys/sit/server.crt`.
+   - Uncheck **Require Proof Key for Code Exchange (PKCE)** — PKCE applies to
+     the web server flow, not JWT.
+   - Uncheck **Require Secret for the Web Server Flow** and **Require Secret
+     for the Refresh Token Flow** (JWT does not send a secret).
+   - Under **OAuth Scopes**, move these to the **Selected** column:
      - `Manage user data via APIs (api)`
      - `Perform requests at any time (refresh_token, offline_access)`
-     - `Access the Salesforce API Platform (sfap_api)` (if available)
-4. Uncheck **Require Secret for Web Server Flow** and **Require Secret for
-   Refresh Token Flow** (JWT doesn't use the secret).
-5. **Save** → confirm the wait screen → **Continue**.
+     - `Access the Salesforce API Platform (sfap_api)` — if listed
+4. Click **Create** (or **Save**). Salesforce may show a "changes can take up
+   to 10 minutes" screen — that's normal for ECAs too.
 
-Once saved:
+### 2c. Configure the app's policies (separate from the app definition)
 
-6. On the Connected App detail page, click **Manage** → **Edit Policies**.
-   - Set **Permitted Users** to **Admin approved users are pre-authorized**.
-   - Set **IP Relaxation** to **Relax IP restrictions**.
-   - Save.
-7. Still on the detail page (top of app), click **Manage Consumer Details**
-   (you'll be asked to verify). Copy the **Consumer Key** — you'll need it in
-   Step 4.
-8. Under **Manage → Profiles / Permission Sets**, add the profile or perm set
-   of the integration user that CI will authenticate as. (For quickest demo
-   setup, add the **System Administrator** profile.)
+Unlike Connected Apps, an ECA keeps **Policies** in their own tab so they can
+be edited and version-controlled independently.
+
+5. Back on the ECA detail page, open the **Policies** tab → click **Edit**.
+6. Under **OAuth Policies**:
+   - **Permitted Users** → _Admin approved users are pre-authorized_
+   - **IP Relaxation** → _Relax IP restrictions_
+   - **Refresh Token Policy** → _Refresh token is valid until revoked_
+     (any value works for JWT — we don't use refresh tokens)
+7. Save.
+
+### 2d. Pre-authorize the integration user
+
+Because you chose "Admin approved users are pre-authorized" in Step 2c, JWT
+auth will only succeed for users whose Profile or Permission Set is explicitly
+authorized on this app.
+
+8. Still on the **Policies** tab, scroll to the **App Authorization** section
+   (in some releases this is a separate **App Users** or **User Access** tab).
+9. Click **Add Profiles** (or **Manage Profiles**) → select the profile of the
+   user CI will authenticate as. For the quickest demo setup, add
+   **System Administrator**. For production, prefer a dedicated integration
+   user with a dedicated **Permission Set** added via **Add Permission Sets**.
+10. Save.
+
+### 2e. Copy the Consumer Key
+
+11. Open the **Settings** tab of the ECA (may also be labelled
+    **OAuth Settings** / **App Settings**).
+12. Under **OAuth Settings → Consumer Key and Secret**, click
+    **Consumer Key and Secret** (or **Manage Consumer Details**) → verify
+    your identity when prompted.
+13. Copy the **Consumer Key** — this is the `SFDX_CONSUMER_KEY_SIT` secret in
+    Step 4. (You do not need the Consumer Secret for JWT.)
+
+> **Fallback**: if your org still has Connected Apps enabled and the ECA UI
+> is not visible, the same JWT flow works with a classic Connected App via
+> **Setup → App Manager → New Connected App**, with the exact same OAuth
+> scope selections and the same "Admin approved users are pre-authorized"
+> policy. Follow the corresponding Step-2 flow in the Salesforce docs; the
+> GitHub-side wiring in Step 4 is identical.
 
 ---
 
@@ -92,7 +140,7 @@ Grab three values you'll need for GitHub secrets:
   integration user (looks like `you@company.com.sandboxname` for a sandbox).
 - **My Domain URL**: `Setup → Company Settings → My Domain`, copy the
   **Current My Domain URL** (e.g. `https://acme--sit.sandbox.my.salesforce.com`).
-- **Consumer Key**: from Step 2.7.
+- **Consumer Key**: from Step 2e.
 
 Test the JWT flow locally before touching GitHub:
 
@@ -106,8 +154,9 @@ sf org login jwt \
 ```
 
 If you see `Successfully authorized ... with org ID ...`, you're good.
-If you get `user hasn't approved this consumer`, revisit Step 2.6 and add the
-integration user's profile/perm set to the Connected App.
+If you get `user hasn't approved this consumer`, revisit Step 2d and add the
+integration user's profile/perm set to the External Client App's
+**Policies → App Authorization** section.
 
 ---
 
@@ -117,14 +166,14 @@ integration user's profile/perm set to the Connected App.
 2. (Optional) Add reviewers if you want approval gates on SIT.
 3. Click into the environment, then **Add secret** four times:
 
-| Secret name              | Value                                                          |
-| ------------------------ | -------------------------------------------------------------- |
-| `SFDX_JWT_KEY_SIT`       | Full contents of `ci/keys/sit/server.key`, including the       |
-|                          | `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----`  |
-|                          | lines and trailing newline                                     |
-| `SFDX_CONSUMER_KEY_SIT`  | Consumer Key from Step 2.7                                     |
-| `SFDX_USERNAME_SIT`      | Integration user's username                                    |
-| `SFDX_INSTANCE_URL_SIT`  | My Domain URL from Step 3 (no trailing slash)                  |
+| Secret name             | Value                                                         |
+| ----------------------- | ------------------------------------------------------------- |
+| `SFDX_JWT_KEY_SIT`      | Full contents of `ci/keys/sit/server.key`, including the      |
+|                         | `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` |
+|                         | lines and trailing newline                                    |
+| `SFDX_CONSUMER_KEY_SIT` | Consumer Key from Step 2e                                     |
+| `SFDX_USERNAME_SIT`     | Integration user's username                                   |
+| `SFDX_INSTANCE_URL_SIT` | My Domain URL from Step 3 (no trailing slash)                 |
 
 Repeat the same 4-secret pattern for `uat` and `production` environments when
 you provision those orgs (with `_UAT` and `_PROD` suffixes).
@@ -164,7 +213,7 @@ metadata into your SIT sandbox.
 
 | Symptom                                                          | Fix                                                                                                                                       |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `user hasn't approved this consumer`                             | The integration user's profile or perm set isn't added to the Connected App (Step 2.6 / 2.8).                                             |
+| `user hasn't approved this consumer`                             | The integration user's profile or perm set isn't pre-authorized on the ECA (Step 2d).                                                     |
 | `invalid_client_id`                                              | Consumer Key was copied incorrectly, or you copied from the wrong org.                                                                    |
 | `invalid_grant: audience`                                        | `SFDX_INSTANCE_URL_*` is wrong. Use the My Domain URL, not `https://test.salesforce.com` for sandboxes on custom domains.                 |
 | `IP restrictions apply`                                          | Step 2.6 — set IP Relaxation to "Relax IP restrictions".                                                                                  |
@@ -181,10 +230,11 @@ To rotate the credential:
 
 1. Run `./scripts/ci/generate-jwt-cert.sh sit` (delete the old `ci/keys/sit/`
    first).
-2. Upload the new `server.crt` to the Connected App
-   (**Manage → Edit → Digital Signatures**).
-3. Update the two changed GitHub secrets (`SFDX_JWT_KEY_SIT`,
-   `SFDX_CONSUMER_KEY_SIT` if you created a new Connected App).
+2. Upload the new `server.crt` to the External Client App
+   (**Settings → OAuth Settings → Edit → Use digital signatures →
+   Choose File**), then save.
+3. Update the two changed GitHub secrets (`SFDX_JWT_KEY_SIT`, plus
+   `SFDX_CONSUMER_KEY_SIT` if you rebuilt the ECA from scratch).
 
 Rotate at least annually or immediately if a key is suspected leaked.
 
