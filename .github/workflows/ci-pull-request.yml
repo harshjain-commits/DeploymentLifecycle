@@ -84,7 +84,10 @@ jobs:
       SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_SIT }}
       SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_SIT }}
       SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_SIT }}
-      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_SIT }}
+      # SF_ORG_INSTANCE_URL (not SFDX_INSTANCE_URL) is the current CLI env
+      # var name; the SFDX_* form is deprecated and emits a warning line on
+      # every sf invocation.
+      SF_ORG_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_SIT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -106,7 +109,7 @@ jobs:
           [ -z "$SFDX_JWT_KEY" ]      && missing+=(SFDX_JWT_KEY_SIT)
           [ -z "$SFDX_CONSUMER_KEY" ] && missing+=(SFDX_CONSUMER_KEY_SIT)
           [ -z "$SFDX_USERNAME" ]     && missing+=(SFDX_USERNAME_SIT)
-          [ -z "$SFDX_INSTANCE_URL" ] && missing+=(SFDX_INSTANCE_URL_SIT)
+          [ -z "$SF_ORG_INSTANCE_URL" ] && missing+=(SFDX_INSTANCE_URL_SIT)
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "::error::Missing required GitHub Environment secrets on 'sit': ${missing[*]}"
             echo "::error::Add them under Settings -> Environments -> sit. See .github/CI-CD-JWT-Setup.md."
@@ -121,7 +124,7 @@ jobs:
             --client-id "$SFDX_CONSUMER_KEY" \
             --jwt-key-file ./server.key \
             --username "$SFDX_USERNAME" \
-            --instance-url "$SFDX_INSTANCE_URL" \
+            --instance-url "$SF_ORG_INSTANCE_URL" \
             --alias sandbox \
             --set-default
           rm -f ./server.key

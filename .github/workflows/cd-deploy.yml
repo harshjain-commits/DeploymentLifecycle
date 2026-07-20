@@ -66,7 +66,10 @@ jobs:
       SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_SIT }}
       SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_SIT }}
       SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_SIT }}
-      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_SIT }}
+      # SF_ORG_INSTANCE_URL (not SFDX_INSTANCE_URL) is the current CLI env
+      # var name; the SFDX_* form is deprecated and emits a warning line on
+      # every sf invocation.
+      SF_ORG_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_SIT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -80,7 +83,7 @@ jobs:
       - name: Guard - required JWT secrets present
         id: guard
         run: |
-          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SF_ORG_INSTANCE_URL" ]; then
             echo "::warning::SIT JWT secrets not configured; skipping deploy. See .github/CI-CD-JWT-Setup.md."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -96,7 +99,7 @@ jobs:
             --client-id "$SFDX_CONSUMER_KEY" \
             --jwt-key-file ./server.key \
             --username "$SFDX_USERNAME" \
-            --instance-url "$SFDX_INSTANCE_URL" \
+            --instance-url "$SF_ORG_INSTANCE_URL" \
             --alias sit \
             --set-default
           rm -f ./server.key
@@ -115,25 +118,15 @@ jobs:
         continue-on-error: true
         run: sf org assign permset --name Bedrock_Onboarding_Admin --target-org sit
 
-      - name: Smoke test - run onboarding tests
-        if: steps.guard.outputs.skip == 'false'
-        run: |
-          sf apex run test \
-            --target-org sit \
-            --tests OnboardingRequestServiceTest \
-            --code-coverage \
-            --result-format human \
-            --output-dir ./test-results \
-            --wait 20
-
-      - name: Upload smoke test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sit-smoke-tests
-          path: ./test-results
-          if-no-files-found: ignore
-          retention-days: 30
+      # Note: intentionally no post-deploy smoke test here.
+      # `sf project deploy start --test-level RunLocalTests` above already runs
+      # every local Apex test inside the deploy transaction and fails the
+      # deploy on any test failure, so re-running the same tests as a "smoke
+      # test" was pure duplication and could add 3-10 minutes of async polling
+      # per run against a fresh sandbox. If you want a live-org sanity check
+      # in the future, prefer inserting an Onboarding_Request__c via anonymous
+      # Apex and asserting on the derived Priority/Risk_Score - that verifies
+      # something the pre-deploy tests cannot.
 
   deploy-uat:
     name: Deploy to UAT
@@ -147,7 +140,7 @@ jobs:
       SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_UAT }}
       SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_UAT }}
       SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_UAT }}
-      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_UAT }}
+      SF_ORG_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_UAT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -161,7 +154,7 @@ jobs:
       - name: Guard - required JWT secrets present
         id: guard
         run: |
-          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SF_ORG_INSTANCE_URL" ]; then
             echo "::warning::UAT JWT secrets not configured; skipping deploy. See .github/CI-CD-JWT-Setup.md."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -177,7 +170,7 @@ jobs:
             --client-id "$SFDX_CONSUMER_KEY" \
             --jwt-key-file ./server.key \
             --username "$SFDX_USERNAME" \
-            --instance-url "$SFDX_INSTANCE_URL" \
+            --instance-url "$SF_ORG_INSTANCE_URL" \
             --alias uat \
             --set-default
           rm -f ./server.key
@@ -213,7 +206,7 @@ jobs:
       SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_PROD }}
       SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_PROD }}
       SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_PROD }}
-      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_PROD }}
+      SF_ORG_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_PROD }}
       COMMIT_SHA: ${{ github.sha }}
       ACTOR: ${{ github.actor }}
       WORKFLOW: ${{ github.workflow }}
@@ -232,7 +225,7 @@ jobs:
       - name: Guard - required JWT secrets present
         id: guard
         run: |
-          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SF_ORG_INSTANCE_URL" ]; then
             echo "::warning::PROD JWT secrets not configured; skipping deploy. See .github/CI-CD-JWT-Setup.md."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -248,7 +241,7 @@ jobs:
             --client-id "$SFDX_CONSUMER_KEY" \
             --jwt-key-file ./server.key \
             --username "$SFDX_USERNAME" \
-            --instance-url "$SFDX_INSTANCE_URL" \
+            --instance-url "$SF_ORG_INSTANCE_URL" \
             --alias prod \
             --set-default
           rm -f ./server.key
