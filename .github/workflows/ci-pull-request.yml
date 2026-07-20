@@ -1,0 +1,119 @@
+name: PR Validation
+
+# Bedrock DevSecOps demo pipeline - Pull Request stage.
+#
+# Runs on every PR opened against SIT, UAT, or main.
+# Enforces:
+#   1. Prettier formatting
+#   2. ESLint
+#   3. Check-only deploy + local Apex tests against the target sandbox (JWT auth)
+#
+# Salesforce Code Analyzer (SCA) lives in its own workflow (code-analyzer.yml)
+# so it fires on every PR to any branch, without waiting on this pipeline.
+#
+# Security note:
+#   All Salesforce credentials are consumed via env: bindings from GitHub Secrets.
+#   No workflow inputs, PR titles, branch names, or other untrusted context is
+#   ever interpolated into a run: shell block, so this workflow is not vulnerable
+#   to the classic GitHub Actions "workflow injection" class of issues.
+#
+# Required GitHub secrets (target sandbox = SIT for now):
+#   SFDX_JWT_KEY_SIT         Private key contents for the External Client App
+#   SFDX_CONSUMER_KEY_SIT    Consumer Key from the External Client App
+#   SFDX_USERNAME_SIT        Integration user username
+#   SFDX_INSTANCE_URL_SIT    My Domain login URL (e.g. https://<org>.my.salesforce.com)
+#
+# See .github/CI-CD-JWT-Setup.md for one-time setup instructions.
+
+on:
+  pull_request:
+    branches: [SIT, UAT, main]
+    paths:
+      - "force-app/**"
+      - "sfdx-project.json"
+      - "package.json"
+      - "config/**"
+      - ".github/workflows/**"
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  format-and-lint:
+    name: Format & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify Prettier formatting
+        run: npm run prettier:verify
+
+      - name: Run ESLint
+        run: npm run lint
+
+  validate-deploy:
+    name: Validate Deploy (check-only)
+    runs-on: ubuntu-latest
+    needs: [format-and-lint]
+    env:
+      SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_SIT }}
+      SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_SIT }}
+      SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_SIT }}
+      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_SIT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Guard - required JWT secrets present
+        id: guard
+        run: |
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+            echo "::warning::JWT secrets not fully configured; skipping org validation. See .github/CI-CD-JWT-Setup.md."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to sandbox (JWT)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          printf '%s' "$SFDX_JWT_KEY" > ./server.key
+          chmod 600 ./server.key
+          sf org login jwt \
+            --client-id "$SFDX_CONSUMER_KEY" \
+            --jwt-key-file ./server.key \
+            --username "$SFDX_USERNAME" \
+            --instance-url "$SFDX_INSTANCE_URL" \
+            --alias sandbox \
+            --set-default
+          rm -f ./server.key
+
+      - name: Validate deploy (check-only) with local tests
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf project deploy validate \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60 \
+            --verbose

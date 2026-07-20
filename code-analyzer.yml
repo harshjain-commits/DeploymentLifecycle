@@ -1,0 +1,27 @@
+# Salesforce Code Analyzer configuration for the Bedrock DevSecOps demo.
+#
+# Docs: https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/config-file.html
+#
+# The Code Analyzer workflow (.github/workflows/code-analyzer.yml) fails
+# the PR gate on any finding with severity >= 3 (Moderate, High, Critical).
+# Rules downgraded here to severity 5 (Info) still appear in the HTML/JSON/SARIF
+# report and in GitHub Code Scanning annotations, but no longer block the PR.
+#
+# `config_root` is intentionally omitted - SCA defaults it to the directory
+# containing this file (repo root), which is exactly what we want. Setting it
+# to "." fails with 'config_root must be an absolute path'.
+
+rules:
+  pmd:
+    # AvoidLogicInTrigger flags ANY body content in a .trigger file - including
+    # the recommended one-line delegation to a handler class. Our triggers
+    # already follow the handler pattern (see OnboardingRequestTrigger.trigger
+    # + OnboardingRequestTriggerHandler.cls), so this is a false positive.
+    # Kept visible (Info) so architects can still see it during reviews.
+    AvoidLogicInTrigger:
+      severity: 5
+      tags:
+        - "Recommended"
+        - "BestPractices"
+        - "Apex"
+        - "Info"

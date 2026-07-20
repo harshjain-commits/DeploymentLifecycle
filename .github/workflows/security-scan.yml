@@ -1,0 +1,59 @@
+name: Security Scan (Nightly)
+
+# Bedrock DevSecOps demo pipeline - layered security scans.
+# Mirrors Slide 10 (security baked into the pipeline) and Slide 14 (tooling).
+# Runs on a nightly schedule plus manual dispatch; PRs get the lighter
+# Code Analyzer run inline in ci-pull-request.yml.
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC nightly
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "force-app/**"
+
+permissions:
+  contents: read
+  security-events: write # required for CodeQL SARIF upload
+
+jobs:
+  codeql:
+    name: CodeQL (Apex + JavaScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # Apex CodeQL support varies by org; JS/TS gives us LWC coverage
+          # immediately, Apex SAST is covered by Salesforce Code Analyzer.
+
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+
+  secret-scan:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

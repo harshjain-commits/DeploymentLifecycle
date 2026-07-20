@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>62.0</apiVersion>
+    <assignments>
+        <description
+    >Marks the incoming Onboarding Request as In Review before it is committed. Runs in memory - no DML - because this is a BeforeSave record-triggered flow.</description>
+        <name>Mark_In_Review</name>
+        <label>Mark In Review</label>
+        <locationX>176</locationX>
+        <locationY>335</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.Status__c</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <stringValue>In Review</stringValue>
+            </value>
+        </assignmentItems>
+    </assignments>
+    <description
+  >Auto-triages newly created onboarding requests. Ultra High Net Worth customers are automatically moved to the In Review status so the BF onboarding ops team can pick them up. Entry criteria filter runs on the trigger definition (BeforeSave) so the flow does not fire on every insert. Because BeforeSave flows execute BEFORE Apex before-triggers in the Salesforce order of execution, the filter is on Net_Worth_Tier__c (which is set by the caller) rather than Priority__c (which is derived later by OnboardingRequestTriggerHandler).</description>
+    <environments>Default</environments>
+    <interviewLabel
+  >Onboarding Request Auto-Triage {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Onboarding Request Auto-Triage</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>CanvasMode</name>
+        <value>
+            <stringValue>AUTO_LAYOUT_CANVAS</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>OriginBuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <start>
+        <locationX>188</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Mark_In_Review</targetReference>
+        </connector>
+        <filterLogic>and</filterLogic>
+        <filters>
+            <field>Net_Worth_Tier__c</field>
+            <operator>EqualTo</operator>
+            <value>
+                <stringValue>Ultra High Net Worth</stringValue>
+            </value>
+        </filters>
+        <object>Onboarding_Request__c</object>
+        <recordTriggerType>Create</recordTriggerType>
+        <triggerType>RecordBeforeSave</triggerType>
+    </start>
+    <status>Active</status>
+</Flow>

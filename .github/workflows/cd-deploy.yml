@@ -1,0 +1,290 @@
+name: Deploy
+
+# Bedrock DevSecOps demo pipeline - Deployment stage.
+#
+# Branch promotion model:
+#   push to SIT   -> deploy to SIT sandbox    (configured now)
+#   push to UAT   -> deploy to UAT sandbox    (skipped until secrets configured)
+#   push to main  -> deploy to PROD org       (skipped until secrets configured)
+#
+# JWT auth is used for all environments. Secrets are namespaced per environment
+# so a single External Client App and integration user per org can be rotated
+# independently.
+#
+# Security note:
+#   All Salesforce credentials are consumed via env: bindings from GitHub Secrets.
+#   No workflow inputs, PR titles, branch names, or other untrusted context is
+#   ever interpolated into a run: shell block, so this workflow is not vulnerable
+#   to the classic GitHub Actions "workflow injection" class of issues.
+#
+# Per-environment secrets (add via Settings -> Environments -> <env>):
+#   sit         -> SFDX_JWT_KEY_SIT, SFDX_CONSUMER_KEY_SIT, SFDX_USERNAME_SIT, SFDX_INSTANCE_URL_SIT
+#   uat         -> SFDX_JWT_KEY_UAT, SFDX_CONSUMER_KEY_UAT, SFDX_USERNAME_UAT, SFDX_INSTANCE_URL_UAT
+#   production  -> SFDX_JWT_KEY_PROD, SFDX_CONSUMER_KEY_PROD, SFDX_USERNAME_PROD, SFDX_INSTANCE_URL_PROD
+#
+# Production environment MUST have "Required reviewers" configured in GitHub so
+# the deployment halts for human approval before applying to PROD.
+#
+# See .github/CI-CD-JWT-Setup.md for one-time setup instructions.
+
+on:
+  push:
+    branches: [SIT, UAT, main]
+    paths:
+      - "force-app/**"
+      - "sfdx-project.json"
+      - "config/**"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - sit
+          - uat
+          - production
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy-sit:
+    name: Deploy to SIT
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/SIT') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'sit')
+    runs-on: ubuntu-latest
+    environment:
+      name: sit
+    env:
+      SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_SIT }}
+      SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_SIT }}
+      SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_SIT }}
+      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_SIT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Guard - required JWT secrets present
+        id: guard
+        run: |
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+            echo "::warning::SIT JWT secrets not configured; skipping deploy. See .github/CI-CD-JWT-Setup.md."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate SIT sandbox (JWT)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          printf '%s' "$SFDX_JWT_KEY" > ./server.key
+          chmod 600 ./server.key
+          sf org login jwt \
+            --client-id "$SFDX_CONSUMER_KEY" \
+            --jwt-key-file ./server.key \
+            --username "$SFDX_USERNAME" \
+            --instance-url "$SFDX_INSTANCE_URL" \
+            --alias sit \
+            --set-default
+          rm -f ./server.key
+
+      - name: Deploy to SIT
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60 \
+            --verbose
+
+      - name: Assign permission set
+        if: steps.guard.outputs.skip == 'false'
+        continue-on-error: true
+        run: sf org assign permset --name Bedrock_Onboarding_Admin --target-org sit
+
+      - name: Smoke test - run onboarding tests
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf apex run test \
+            --target-org sit \
+            --tests OnboardingRequestServiceTest \
+            --code-coverage \
+            --result-format human \
+            --output-dir ./test-results \
+            --wait 20
+
+      - name: Upload smoke test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sit-smoke-tests
+          path: ./test-results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  deploy-uat:
+    name: Deploy to UAT
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/UAT') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'uat')
+    runs-on: ubuntu-latest
+    environment:
+      name: uat
+    env:
+      SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_UAT }}
+      SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_UAT }}
+      SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_UAT }}
+      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_UAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Guard - required JWT secrets present
+        id: guard
+        run: |
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+            echo "::warning::UAT JWT secrets not configured; skipping deploy. See .github/CI-CD-JWT-Setup.md."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate UAT (JWT)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          printf '%s' "$SFDX_JWT_KEY" > ./server.key
+          chmod 600 ./server.key
+          sf org login jwt \
+            --client-id "$SFDX_CONSUMER_KEY" \
+            --jwt-key-file ./server.key \
+            --username "$SFDX_USERNAME" \
+            --instance-url "$SFDX_INSTANCE_URL" \
+            --alias uat \
+            --set-default
+          rm -f ./server.key
+
+      - name: Validate deploy (check-only)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf project deploy validate \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60
+
+      - name: Deploy to UAT
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60
+
+  deploy-prod:
+    name: Deploy to PROD (manual approval)
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+    runs-on: ubuntu-latest
+    environment:
+      # The "production" environment must have Required Reviewers configured
+      # under Settings -> Environments -> production so the deploy halts for
+      # human approval by the Release Train Engineer / on-call architect.
+      name: production
+    env:
+      SFDX_JWT_KEY: ${{ secrets.SFDX_JWT_KEY_PROD }}
+      SFDX_CONSUMER_KEY: ${{ secrets.SFDX_CONSUMER_KEY_PROD }}
+      SFDX_USERNAME: ${{ secrets.SFDX_USERNAME_PROD }}
+      SFDX_INSTANCE_URL: ${{ secrets.SFDX_INSTANCE_URL_PROD }}
+      COMMIT_SHA: ${{ github.sha }}
+      ACTOR: ${{ github.actor }}
+      WORKFLOW: ${{ github.workflow }}
+      RUN_ID: ${{ github.run_id }}
+      REF_NAME: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Guard - required JWT secrets present
+        id: guard
+        run: |
+          if [ -z "$SFDX_JWT_KEY" ] || [ -z "$SFDX_CONSUMER_KEY" ] || [ -z "$SFDX_USERNAME" ] || [ -z "$SFDX_INSTANCE_URL" ]; then
+            echo "::warning::PROD JWT secrets not configured; skipping deploy. See .github/CI-CD-JWT-Setup.md."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate PROD (JWT)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          printf '%s' "$SFDX_JWT_KEY" > ./server.key
+          chmod 600 ./server.key
+          sf org login jwt \
+            --client-id "$SFDX_CONSUMER_KEY" \
+            --jwt-key-file ./server.key \
+            --username "$SFDX_USERNAME" \
+            --instance-url "$SFDX_INSTANCE_URL" \
+            --alias prod \
+            --set-default
+          rm -f ./server.key
+
+      - name: Final validation (quick deploy preflight)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf project deploy validate \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60
+
+      - name: Deploy to PROD
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --wait 60
+
+      - name: Emit release evidence pack
+        if: always() && steps.guard.outputs.skip == 'false'
+        run: |
+          mkdir -p ./evidence
+          {
+            echo "Release ref: $REF_NAME"
+            echo "Commit:      $COMMIT_SHA"
+            echo "Actor:       $ACTOR"
+            echo "Time (UTC):  $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Workflow:    $WORKFLOW#$RUN_ID"
+          } > ./evidence/release-summary.txt
+
+      - name: Upload evidence pack
+        if: always() && steps.guard.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: ./evidence
+          retention-days: 365

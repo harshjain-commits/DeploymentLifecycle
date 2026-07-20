@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Division__c</fullName>
+    <description
+  >Bedrock division that owns the onboarding request.</description>
+    <externalId>false</externalId>
+    <label>Division</label>
+    <required>true</required>
+    <trackHistory>true</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Bedrock Financial</fullName>
+                <default>true</default>
+                <label>Bedrock Financial</label>
+            </value>
+            <value>
+                <fullName>Bedrock Healthcare</fullName>
+                <default>false</default>
+                <label>Bedrock Healthcare</label>
+            </value>
+            <value>
+                <fullName>Bedrock Transportation</fullName>
+                <default>false</default>
+                <label>Bedrock Transportation</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>
