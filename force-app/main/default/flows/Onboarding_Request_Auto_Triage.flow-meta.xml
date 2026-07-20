@@ -1,39 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <Flow xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>62.0</apiVersion>
-    <decisions>
+    <assignments>
         <description
-    >Routes new onboarding requests based on Priority.</description>
-        <name>Route_By_Priority</name>
-        <label>Route By Priority</label>
-        <locationX>314</locationX>
+    >Marks the incoming Onboarding Request as In Review before it is committed. Runs in memory - no DML - because this is a BeforeSave record-triggered flow.</description>
+        <name>Mark_In_Review</name>
+        <label>Mark In Review</label>
+        <locationX>176</locationX>
         <locationY>335</locationY>
-        <defaultConnectorLabel>Default Outcome</defaultConnectorLabel>
-        <rules>
-            <name>High_Or_Critical</name>
-            <conditionLogic>or</conditionLogic>
-            <conditions>
-                <leftValueReference>$Record.Priority__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue>
-                    <stringValue>High</stringValue>
-                </rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Priority__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue>
-                    <stringValue>Critical</stringValue>
-                </rightValue>
-            </conditions>
-            <connector>
-                <targetReference>Mark_In_Review</targetReference>
-            </connector>
-            <label>High Or Critical</label>
-        </rules>
-    </decisions>
+        <assignmentItems>
+            <assignToReference>$Record.Status__c</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <stringValue>In Review</stringValue>
+            </value>
+        </assignmentItems>
+    </assignments>
     <description
-  >Auto-triages newly created onboarding requests. High and Critical priority requests are immediately moved to In Review so the BF onboarding ops team can pick them up; Low/Medium remain in New for batch processing.</description>
+  >Auto-triages newly created onboarding requests. Ultra High Net Worth customers are automatically moved to the In Review status so the BF onboarding ops team can pick them up. Entry criteria filter runs on the trigger definition (BeforeSave) so the flow does not fire on every insert. Because BeforeSave flows execute BEFORE Apex before-triggers in the Salesforce order of execution, the filter is on Net_Worth_Tier__c (which is set by the caller) rather than Priority__c (which is derived later by OnboardingRequestTriggerHandler).</description>
     <environments>Default</environments>
     <interviewLabel
   >Onboarding Request Auto-Triage {!$Flow.CurrentDateTime}</interviewLabel>
@@ -57,30 +41,23 @@
         </value>
     </processMetadataValues>
     <processType>AutoLaunchedFlow</processType>
-    <recordUpdates>
-        <description
-    >Sets the Status to In Review for High/Critical onboarding requests.</description>
-        <name>Mark_In_Review</name>
-        <label>Mark In Review</label>
-        <locationX>176</locationX>
-        <locationY>455</locationY>
-        <inputAssignments>
-            <field>Status__c</field>
-            <value>
-                <stringValue>In Review</stringValue>
-            </value>
-        </inputAssignments>
-        <inputReference>$Record</inputReference>
-    </recordUpdates>
     <start>
         <locationX>188</locationX>
         <locationY>0</locationY>
         <connector>
-            <targetReference>Route_By_Priority</targetReference>
+            <targetReference>Mark_In_Review</targetReference>
         </connector>
+        <filterLogic>and</filterLogic>
+        <filters>
+            <field>Net_Worth_Tier__c</field>
+            <operator>EqualTo</operator>
+            <value>
+                <stringValue>Ultra High Net Worth</stringValue>
+            </value>
+        </filters>
         <object>Onboarding_Request__c</object>
         <recordTriggerType>Create</recordTriggerType>
-        <triggerType>RecordAfterSave</triggerType>
+        <triggerType>RecordBeforeSave</triggerType>
     </start>
     <status>Active</status>
 </Flow>

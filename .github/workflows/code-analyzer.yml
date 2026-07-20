@@ -56,6 +56,7 @@ jobs:
         id: sca
         run: |
           sf code-analyzer run \
+            --config-file code-analyzer.yml \
             --workspace force-app \
             --output-file sca-report.html \
             --output-file sca-report.json \
@@ -101,7 +102,7 @@ jobs:
               'To reproduce locally:',
               '```',
               'sf plugins install code-analyzer',
-              'sf code-analyzer run --workspace force-app --severity-threshold 3',
+              'sf code-analyzer run --config-file code-analyzer.yml --workspace force-app --severity-threshold 3',
               '```',
             ].join('\n');
             await github.rest.issues.createComment({

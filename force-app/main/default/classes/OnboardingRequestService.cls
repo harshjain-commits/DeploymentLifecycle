@@ -69,7 +69,7 @@ public with sharing class OnboardingRequestService {
       return new List<Id>();
     }
     applyOnboardingRules(requests);
-    insert requests;
+    Database.insert(requests, AccessLevel.USER_MODE);
     List<Id> ids = new List<Id>();
     for (Onboarding_Request__c req : requests) {
       ids.add(req.Id);
