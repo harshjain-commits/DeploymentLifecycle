@@ -13,11 +13,12 @@
         <object>Onboarding_Request__c</object>
         <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>Onboarding_Request__c.Customer_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
+    <!--
+      Customer_Name__c is marked required=true on the field itself, so
+      Salesforce grants read/edit implicitly for every user with object
+      access. Declaring fieldPermissions here would fail deployment with
+      "You cannot deploy to a required field".
+    -->
     <fieldPermissions>
         <editable>true</editable>
         <field>Onboarding_Request__c.Division__c</field>
