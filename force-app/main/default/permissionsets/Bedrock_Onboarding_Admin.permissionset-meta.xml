@@ -14,24 +14,16 @@
         <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
     <!--
-      Customer_Name__c is marked required=true on the field itself, so
-      Salesforce grants read/edit implicitly for every user with object
-      access. Declaring fieldPermissions here would fail deployment with
-      "You cannot deploy to a required field".
+      Customer_Name__c, Division__c, and Status__c are all marked
+      required=true on their field metadata, so Salesforce grants
+      read/edit implicitly for every user with object access. Declaring
+      fieldPermissions for a universally-required field fails deployment
+      with "You cannot deploy to a required field". They are intentionally
+      omitted from this permission set.
     -->
     <fieldPermissions>
         <editable>true</editable>
-        <field>Onboarding_Request__c.Division__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
         <field>Onboarding_Request__c.Net_Worth_Tier__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>Onboarding_Request__c.Status__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
