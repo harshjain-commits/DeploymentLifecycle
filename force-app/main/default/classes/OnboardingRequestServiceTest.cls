@@ -6,7 +6,7 @@
  * strategy presentation.
  *
  * Every test wraps its body in System.runAs so the assertions are
- * evaluated in the running user's sharing/CRUD context, not systm
+ * evaluated in the running user's sharing/CRUD context, not system
  * context (PMD.ApexUnitTestClassShouldHaveRunAs).
  */
 @IsTest

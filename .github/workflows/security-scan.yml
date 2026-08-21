@@ -13,6 +13,11 @@ on:
     branches: [main]
     paths:
       - "force-app/**"
+  # dependency-review runs only on pull_request events (see job-level guard).
+  # It must be listed here or the pull_request context never reaches the
+  # workflow and the job silently never runs.
+  pull_request:
+    branches: [SIT, UAT, main]
 
 permissions:
   contents: read

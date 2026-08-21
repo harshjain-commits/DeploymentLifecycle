@@ -1,0 +1,61 @@
+# Bedrock DevSecOps demo - Dependabot configuration.
+#
+# Two ecosystems live in this repo:
+#   1. npm  - dev tooling only (Prettier, ESLint, Jest, Salesforce lint plugins,
+#             Husky). No runtime deps (package.json has `private: true` and no
+#             `dependencies` block), so version bumps here only affect local
+#             developer / CI tooling, never Salesforce production behaviour.
+#   2. github-actions - the pins in .github/workflows/*.yml (actions/checkout,
+#             actions/setup-node, github/codeql-action, gitleaks/gitleaks-action,
+#             actions/dependency-review-action, actions/upload-artifact,
+#             actions/github-script). These deserve their own bump cadence so
+#             a Node deprecation or an action CVE cannot silently rot the
+#             pipeline.
+#
+# Weekly cadence + minor/patch grouping keeps PR volume sane for a demo repo
+# while still surfacing security bumps immediately (security-only PRs bypass
+# the schedule).
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: scope
+    groups:
+      dev-minor-and-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(ci)"
+      include: scope
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
